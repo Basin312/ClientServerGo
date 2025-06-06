@@ -5,18 +5,21 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync"
 	"strings"
+	"sync"
 )
+
 type Client struct {
 	conn net.Conn
 	name string
 }
+
 var (
 	clients   = make(map[net.Conn]Client) // koneksi aktif
 	broadcast = make(chan string)         // channel untuk siaran pesan
 	lock      sync.Mutex                  // untuk sinkronisasi akses map
 )
+
 func main() {
 	// membuat koneksi untuk mendengar protocol tcp alamat 9090
 	listenConection, err := net.Listen("tcp", ":9090")
@@ -28,11 +31,13 @@ func main() {
 	} else {
 		fmt.Println("Listening...")
 	}
+
 	go broadcaster()
+
 	// menerima koneksi client
-	for{
+	for {
 		conn, err := listenConection.Accept()
-	
+
 		// jika tidak bisa menerima maka error
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to accept connection!")
@@ -49,7 +54,7 @@ func handleClient(conn net.Conn) {
 
 	reader := bufio.NewReader(conn)
 
-	conn.Write([]byte("Enter your name: "))
+	// conn.Write([]byte("Enter your name: "))
 	name, _ := reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 

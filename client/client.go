@@ -31,6 +31,22 @@ func main() {
 		fmt.Println("Connected to server!")
 	}
 
+	defer conn.Close()
+
+
+	reader := bufio.NewReader(conn)
+	stdin := bufio.NewReader(os.Stdin)
+
+
+	// Read initial prompt from server
+	prompt, _ := reader.ReadString('\n')
+	fmt.Print(prompt)
+
+	// Send username
+	username, _ := stdin.ReadString('\n')
+	conn.Write([]byte(username))
+
+
 	// mendengarkan pesan
 	go listenMessages(conn)
 

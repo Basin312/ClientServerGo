@@ -1,0 +1,10 @@
+# Log files
+server/server.log
+
+# Binary output
+*.exe
+*.out
+
+# Editor/OS files
+.vscode/
+.DS_Store

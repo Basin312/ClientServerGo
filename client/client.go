@@ -8,29 +8,14 @@ import (
 	"strings"
 )
 
-func listenMessages(conn net.Conn) {
-	reader := bufio.NewReader(conn)
-	for {
-		msg, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Disconnected from server.")
-			os.Exit(0)
-		}
-		fmt.Print(msg)
-	}
-}
 
 func main() {
-	// bikin koneksi type network dan alamat port
 	conn, err := net.Dial("tcp", ":9090")
 
-	//check kalau ada error atau tidak,
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot connect to server!")
-	} else {
-		fmt.Println("Connected to server!")
+		fmt.Println("Cannot connect to server:", err)
+		return
 	}
-
 	defer conn.Close()
 
 
@@ -39,31 +24,36 @@ func main() {
 
 
 	// Read initial prompt from server
-	prompt, _ := reader.ReadString('\n')
+	prompt, _ := reader.ReadString(':')
 	fmt.Print(prompt)
 
 	// Send username
 	username, _ := stdin.ReadString('\n')
 	conn.Write([]byte(username))
 
+	// Display welcome message
+	welcome, _ := reader.ReadString('\n')
+	fmt.Print(welcome)
 
-	// mendengarkan pesan
-	go listenMessages(conn)
+	// Start goroutine to read from server
+	go func() {
+		for {
+			message, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Println("Disconnected from server.")
+				os.Exit(0)
+			}
+			fmt.Print(message)
 
-	//input username dari client
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter your name: ")
-	name, _ := reader.ReadString('\n')
-	name = strings.TrimSpace(name)
-	conn.Write([]byte(name + "\n"))
-
-	for {
-		text, _ := reader.ReadString('\n')
-		text = strings.TrimSpace(text)
-		if text == "/exit" {
-			break
 		}
-		conn.Write([]byte(text + "\n"))
+	}()
 
+	// Main input loop
+	for {
+		text, _ := stdin.ReadString('\n')
+		text = strings.TrimSpace(text)
+		if text != "" {
+			conn.Write([]byte(text + "\n"))
+		}
 	}
 }

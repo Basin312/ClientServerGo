@@ -66,6 +66,7 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
+	conn.Write([]byte("Enter your username:\n"))
 	name, _ := reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 

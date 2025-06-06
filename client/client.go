@@ -24,7 +24,7 @@ func main() {
 
 
 	// Read initial prompt from server
-	prompt, _ := reader.ReadString(':')
+	prompt, _ := reader.ReadString('\n')
 	fmt.Print(prompt)
 
 	// Send username

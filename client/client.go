@@ -8,16 +8,20 @@ import (
 	"strings"
 )
 
+
 func main() {
 	conn, err := net.Dial("tcp", ":9090")
+
 	if err != nil {
 		fmt.Println("Cannot connect to server:", err)
 		return
 	}
 	defer conn.Close()
 
+
 	reader := bufio.NewReader(conn)
 	stdin := bufio.NewReader(os.Stdin)
+
 
 	// Read initial prompt from server
 	prompt, _ := reader.ReadString(':')
@@ -40,6 +44,7 @@ func main() {
 				os.Exit(0)
 			}
 			fmt.Print(message)
+
 		}
 	}()
 

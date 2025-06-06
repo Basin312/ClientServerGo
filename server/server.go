@@ -17,11 +17,13 @@ type Client struct {
 	room     string
 }
 
+
 type Message struct {
 	from    string
 	room    string
 	content string
 }
+
 
 var (
 	clients   = make(map[net.Conn]*Client)
@@ -45,6 +47,7 @@ func main() {
 		fmt.Println("Failed to listen:", err)
 		return
 	}
+
 	defer ln.Close()
 	fmt.Println("Server started on :9090")
 
@@ -52,6 +55,7 @@ func main() {
 
 	for {
 		conn, err := ln.Accept()
+
 		if err != nil {
 			fmt.Println("Failed to accept connection:", err)
 			continue
@@ -62,7 +66,6 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
-	conn.Write([]byte("Enter a username: "))
 	name, _ := reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 
@@ -141,6 +144,7 @@ func joinRoom(client *Client, room string) {
 	logger.Printf("%s joined room '%s'", client.name, room)
 }
 
+
 func leaveRoom(client *Client) {
 	if client.room == "" {
 		return
@@ -176,11 +180,13 @@ func listRooms(client *Client) {
 func broadcaster() {
 	for msg := range broadcast {
 		lock.Lock()
+
 		members := rooms[msg.room]
 		for _, member := range members {
 			if member.name != msg.from {
 				member.incoming <- fmt.Sprintf("[%s]: %s\n", msg.from, msg.content)
 			}
+
 		}
 		lock.Unlock()
 	}

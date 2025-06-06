@@ -17,23 +17,22 @@ type Client struct {
 	room     string
 }
 
-
 type Message struct {
 	from    string
 	room    string
 	content string
 }
 
-
 var (
-	clients   = make(map[net.Conn]*Client)
-	rooms     = make(map[string][]*Client)
+	clients   = make(map[net.Conn]*Client) //list client yang ada di server
+	rooms     = make(map[string][]*Client) //list room dan client yang ada di room tersebut
 	broadcast = make(chan Message)
 	lock      = sync.Mutex{}
 	logger    *log.Logger
 )
 
 func main() {
+	// bikin log untuk semua yang terjadi dalam server
 	logF, err := os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("Failed to open log file:", err)
@@ -42,6 +41,7 @@ func main() {
 	defer logF.Close()
 	logger = log.New(logF, "", log.LstdFlags)
 
+	// bikin koneksi
 	ln, err := net.Listen("tcp", ":9090")
 	if err != nil {
 		fmt.Println("Failed to listen:", err)
@@ -49,6 +49,7 @@ func main() {
 	}
 
 	defer ln.Close()
+
 	fmt.Println("Server started on :9090")
 
 	go broadcaster()
@@ -66,32 +67,54 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
-	conn.Write([]byte("Enter your username:\n"))
-	name, _ := reader.ReadString('\n')
-	name = strings.TrimSpace(name)
+
+	var name string
+
+	// phase memasukan nama
+	for {
+		conn.Write([]byte("Enter your username:\n"))
+
+		//menerima input nama
+		name, _ = reader.ReadString('\n')
+		name = strings.TrimSpace(name)
+
+		// untuk menyimpan namanya valid(belum ada di server) atau tidak
+		var valid string
+
+		// check di di variable client
+		for _, client := range clients {
+			// kalau ada berarti tidak valid
+			if client.name == name {
+				valid = "taken"
+				conn.Write([]byte("taken\n"))
+				break
+			}
+		}
+
+		// jika valid maka keluar dari phase nama
+		if valid != "taken" {
+			conn.Write([]byte("ok\n"))
+			break
+		}
+
+		// message ke client kalau nama sudah ada punya
+		conn.Write([]byte("Warning: username has been taken\n"))
+	}
 
 	lock.Lock()
-	for _, client := range clients {
-		if client.name == name {
-			conn.Write([]byte("Username already taken.\n"))
-			conn.Close()
-			lock.Unlock()
-			return
-		}
-	}
 	client := &Client{name: name, conn: conn, incoming: make(chan string)}
 	clients[conn] = client
 	lock.Unlock()
 
 	logger.Printf("%s connected from %s", client.name, conn.RemoteAddr())
-	conn.Write([]byte("Welcome, " + client.name + "! Use /join <room>, /leave, /exit, /rooms\n"))
+	conn.Write([]byte("Welcome to Lobby, " + client.name + "! \n Use:\n /join <room> : client can join to any room \n /leave: client can leave the room(if only in the) \n /exit: client close the program,\n /rooms: client can see the room that exist  \n"))
 
 	go sendMessages(client)
 
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		input := scanner.Text()
-		handleCommand(client, input)
+		handleCommand(client, input, conn)
 	}
 
 	lock.Lock()
@@ -102,22 +125,36 @@ func handleConnection(conn net.Conn) {
 	logger.Printf("%s disconnected", client.name)
 }
 
-func handleCommand(client *Client, input string) {
+func handleCommand(client *Client, input string, conn net.Conn) {
 	if strings.HasPrefix(input, "/") {
+
 		switch {
+		// command join
 		case strings.HasPrefix(input, "/join "):
 			room := strings.TrimSpace(strings.TrimPrefix(input, "/join "))
 			joinRoom(client, room)
+		//command leave the room
 		case input == "/leave":
-			leaveRoom(client)
+			// check sudah join room sebelumnya atau tidak
+			if client.room == "" {
+				conn.Write([]byte("You have not taken any Room\n"))
+			} else {
+				leaveRoom(client)
+				conn.Write([]byte("You have leave the Room\n"))
+				conn.Write([]byte("Welcome to Lobby, " + client.name + "! \n Use:\n /join <room> : client can join to any room \n /leave: client can leave the room(if only in the) \n /exit: client close the program,\n /rooms: client can see the room that exist  \n"))
+			}
+		// command list room
 		case input == "/rooms":
 			listRooms(client)
+		// command keluar dari room
 		case input == "/exit":
 			client.conn.Close()
+		//command diluar yang sudah ada
 		default:
 			client.incoming <- "Unknown command.\n"
 		}
 	} else {
+
 		if client.room == "" {
 			client.incoming <- "Join a room to send messages.\n"
 		} else {
@@ -144,7 +181,6 @@ func joinRoom(client *Client, room string) {
 	broadcast <- Message{from: "Server", room: room, content: fmt.Sprintf(">> %s has joined the room\n", client.name)}
 	logger.Printf("%s joined room '%s'", client.name, room)
 }
-
 
 func leaveRoom(client *Client) {
 	if client.room == "" {

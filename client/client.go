@@ -8,7 +8,6 @@ import (
 	"strings"
 )
 
-
 func main() {
 	conn, err := net.Dial("tcp", ":9090")
 
@@ -18,18 +17,34 @@ func main() {
 	}
 	defer conn.Close()
 
-
 	reader := bufio.NewReader(conn)
 	stdin := bufio.NewReader(os.Stdin)
 
-
-	// Read initial prompt from server
-	prompt, _ := reader.ReadString(':')
-	fmt.Print(prompt)
-
 	// Send username
-	username, _ := stdin.ReadString('\n')
-	conn.Write([]byte(username))
+	for {
+		// Read initial prompt from server
+		prompt, _ := reader.ReadString('\n') // Wait for prompt
+		fmt.Print(prompt)
+
+		username, _ := stdin.ReadString('\n')
+		conn.Write([]byte(username))
+
+		// Expect either "ok" or "taken"
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Failed to read username response")
+			continue
+		}
+
+		response = strings.TrimSpace(response)
+		if response == "ok" {
+			break
+		}
+		if response == "taken" {
+			message, _ := reader.ReadString('\n')
+			fmt.Println(message)
+		}
+	}
 
 	// Display welcome message
 	welcome, _ := reader.ReadString('\n')

@@ -54,7 +54,6 @@ func handleClient(conn net.Conn) {
 
 	reader := bufio.NewReader(conn)
 
-	// conn.Write([]byte("Enter your name: "))
 	name, _ := reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 
@@ -78,11 +77,13 @@ func handleClient(conn net.Conn) {
 	lock.Unlock()
 	broadcast <- fmt.Sprintf(">> %s has left the chat\n", name)
 }
+
 func broadcaster() {
 	for {
 		msg := <-broadcast
 		lock.Lock()
 		for conn := range clients {
+
 			go func(c net.Conn) {
 				_, err := c.Write([]byte(msg))
 				if err != nil {

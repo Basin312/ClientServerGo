@@ -72,7 +72,11 @@ func handleConnection(conn net.Conn) {
 
 	// phase memasukan nama
 	for {
-		conn.Write([]byte("Enter your username:\n"))
+		conn.Write([]byte("\033[33m+-------------------------------------+\n"))
+		conn.Write([]byte("|    🌐  Welcome to Terminal Chat!    |\n"))
+		conn.Write([]byte("|  Where terminals come to life 💬    |\n"))
+		conn.Write([]byte("+-------------------------------------+\033[0m\n\n"))
+		conn.Write([]byte("\033[32m👤 Please enter your name:\033[0m \n")) // prompt tanpa \n agar input di baris yang sama
 
 		//menerima input nama
 		name, _ = reader.ReadString('\n')
@@ -107,7 +111,20 @@ func handleConnection(conn net.Conn) {
 	lock.Unlock()
 
 	logger.Printf("%s connected from %s", client.name, conn.RemoteAddr())
-	conn.Write([]byte("Welcome to Lobby, " + client.name + "! \n Use:\n /join <room> : client can join to any room \n /leave: client can leave the room(if only in the) \n /exit: client close the program,\n /rooms: client can see the room that exist  \n"))
+
+
+	lobbyMsg := fmt.Sprintf("\033[33m" +
+    "\n+---------------------------------------------+\n" +
+    "  👋 Welcome to the Lobby, %s!               \n" +
+    "|  🔧 Commands you can use:                   |\n" +
+    "|   • /join <room>  - join a chat room        |\n" +
+    "|   • /leave       - leave current room       |\n" +
+    "|   • /rooms       - list available rooms     |\n" +
+    "|   • /exit        - exit the program         |\n" +
+    "+---------------------------------------------+\033[0m\n" +
+	"\033[32m💡 Enter your command:\033[0m \n", client.name)
+
+	conn.Write([]byte(lobbyMsg))
 
 	go sendMessages(client)
 
@@ -156,7 +173,8 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 	} else {
 
 		if client.room == "" {
-			client.incoming <- "Join a room to send messages.\n"
+			client.incoming <- "\033[31m\n❌ Command not recognized. Please use a valid command.\033[0m\n\033[32m💡 Enter your command:\033[0m \n"
+
 		} else {
 			msg := Message{from: client.name, room: client.room, content: input}
 			broadcast <- msg

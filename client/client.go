@@ -5,44 +5,84 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
+	"sync"
+)
+
+// variabel global untuk client
+var (
+	wg      sync.WaitGroup
+	name    string
+	err     error
+	koneksi net.Conn
 )
 
 func main() {
-	// bikin koneksi type network dan alamat port
-	conn, err := net.Dial("tcp", ":9090")
-
-	//check kalau ada error atau tidak, 
+	// Koneksi ke server di localhost:9090
+	koneksi, err = net.Dial("tcp", ":9090")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot connect to server!")
-	} else {
-		fmt.Println("Connected to server!")
-	}
-
-    // untuk menerima pesan dari server
-	connReader := bufio.NewReader(conn)
-    // input reader untuk keyboard
-	localReader := bufio.NewReader(os.Stdin)
-    
-	fmt.Print("Type your message> ")
-	
-    // membaca localreader sampai user klik enter
-    message, err := localReader.ReadString('\n')
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot read the message!")
-	} else {
-		fmt.Println("The message has been read!")
-	}
-
-	conn.Write([]byte(message)) // fmt.Fprint(conn, message)
-	fmt.Println("The message has been sent!")
-	fmt.Println("Waiting for reply...")
-	echo, err := connReader.ReadString('\n')
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to read the echo!")
+		fmt.Fprintln(os.Stderr, "Cannot connect to server!")
 		os.Exit(1)
-	} else {
-		fmt.Println("The echo has been received!")
 	}
+	fmt.Println("Connected to server!")
 
-	fmt.Println(echo)
+	// Reader untuk koneksi dan stdin
+	connReader := bufio.NewReader(koneksi)
+	localReader := bufio.NewReader(os.Stdin)
+
+	wg.Add(1)
+	// Terima pesan dari server (misal: "masukan nama")
+	go receivedMessage(connReader)
+	// Jalankan goroutine untuk mengirim pesan
+	go sentMessage(localReader, koneksi)
+
+	wg.Wait()
+}
+
+func insertNamePhase(conn net.Conn, connReader bufio.Reader, local *bufio.Reader) {
+	for {
+		// Masukan nama
+		fmt.Print("Enter your username: ")
+		name, err = local.ReadString('\n')
+
+		// Mencegah error dan nama kosong
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "=== Cannot read the name! ===")
+			continue
+		} else if strings.TrimSpace(name) == "" {
+			fmt.Println("=== Name cannot be empty ===")
+			continue
+		}
+
+		conn.Write([]byte(name))
+		name = strings.Trim(name, "\r\n")
+	}
+}
+func sentMessage(localReader *bufio.Reader, conn net.Conn) {
+	for {
+
+		message, err := localReader.ReadString('\n')
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "=== Sorry, we encounter an error ===")
+			break
+		}
+
+		if strings.TrimSpace(message) == "" {
+			continue
+		}
+
+		message = message + "\n"
+		conn.Write([]byte(message))
+	}
+}
+
+func receivedMessage(connReader *bufio.Reader) {
+	for {
+		message, err := connReader.ReadString('\n')
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "=== Connection closed ===")
+			os.Exit(1)
+		}
+		fmt.Print(message) // langsung print tanpa newline
+	}
 }

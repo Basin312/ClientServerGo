@@ -48,6 +48,30 @@ func main() {
 
 func communicationWithServer(koneksiUser net.Conn) {
 
+	// Inform user
+	fmt.Fprintf(koneksiUser, "Welcome, %s! Type a message:\n", name)
+
+	// Create reader to listen for messages
+	readers := bufio.NewReader(koneksiUser)
+	for {
+		message, err := readers.ReadString('\n')
+		if err != nil {
+			fmt.Printf("User '%s' disconnected.\n", name)
+			return
+		}
+
+		message = strings.TrimSpace(message)
+		fmt.Printf("[%s] %s\n", user.name, message)
+
+		// Echo back to the client
+		fmt.Fprintf(koneksiUser, "Echo [%s]: %s\n", user.name, message)
+	}
+
+}
+
+func receiveName(koneksi net.Conn, reader *bufio.Reader) {
+
+	fmt.Fprintln(koneksiUser, "masukan nama")
 	// menerima pesan dari client
 	reader := bufio.NewReader(koneksiUser)
 
@@ -69,22 +93,4 @@ func communicationWithServer(koneksiUser net.Conn) {
 	}
 
 	listUser = append(listUser, user)
-
-	// Inform user
-	fmt.Fprintf(koneksiUser, "Welcome, %s! Type a message:\n", name)
-
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Printf("User '%s' disconnected.\n", name)
-			return
-		}
-
-		message = strings.TrimSpace(message)
-		fmt.Printf("[%s] %s\n", user.name, message)
-
-		// Echo back to the client
-		fmt.Fprintf(koneksiUser, "Echo [%s]: %s\n", user.name, message)
-	}
-
 }

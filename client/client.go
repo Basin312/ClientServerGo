@@ -61,7 +61,7 @@ func main() {
 		for {
 			message, err := reader.ReadString('\n')
 			if err != nil {
-				fmt.Println("Disconnected from server.")
+				fmt.Println("\033[33m\nDisconnected from server.\033[0m")
 				os.Exit(0)
 			}
 			fmt.Print(message)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 )
+
 func listenMessages(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 	for {
@@ -18,17 +19,19 @@ func listenMessages(conn net.Conn) {
 		fmt.Print(msg)
 	}
 }
+
 func main() {
 	// bikin koneksi type network dan alamat port
 	conn, err := net.Dial("tcp", ":9090")
 
-	//check kalau ada error atau tidak, 
+	//check kalau ada error atau tidak,
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot connect to server!")
 	} else {
 		fmt.Println("Connected to server!")
 	}
 
+	// mendengarkan pesan
 	go listenMessages(conn)
 
 	//input username dari client
@@ -38,12 +41,10 @@ func main() {
 	name = strings.TrimSpace(name)
 	conn.Write([]byte(name + "\n"))
 
-
-    for{
-		fmt.Print("You> ")
+	for {
 		text, _ := reader.ReadString('\n')
 		text = strings.TrimSpace(text)
-		if text == "exit" {
+		if text == "/exit" {
 			break
 		}
 		conn.Write([]byte(text + "\n"))

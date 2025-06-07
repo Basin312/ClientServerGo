@@ -23,8 +23,14 @@ func main() {
 	// Send username
 	for {
 		// Read initial prompt from server
-		prompt, _ := reader.ReadString('\n') // Wait for prompt
-		fmt.Print(prompt)
+		for i := 0; i < 6; i++ {
+			line, err := reader.ReadString('\n')
+			if err != nil{
+				fmt.Println("Gagal membaca pesan selamat datang")
+				return
+			}
+			fmt.Print(line)
+		}
 
 		username, _ := stdin.ReadString('\n')
 		conn.Write([]byte(username))
@@ -55,7 +61,7 @@ func main() {
 		for {
 			message, err := reader.ReadString('\n')
 			if err != nil {
-				fmt.Println("Disconnected from server.")
+				fmt.Println("\033[33m\nDisconnected from server.\033[0m")
 				os.Exit(0)
 			}
 			fmt.Print(message)

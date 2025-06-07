@@ -179,12 +179,12 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 			client.conn.Close()
 		//command diluar yang sudah ada
 		default:
-			client.incoming <- "\033[31m\n❌ Unknown command.\033[0m\n\033[32m💡 Enter your command:\033[0m \n"
+			client.incoming <- "\033[31m❌ Unknown command.\033[0m\n\n\033[32m💡 Enter your command:\033[0m \n"
 		}
 	} else {
 
 		if client.room == "" {
-			client.incoming <- "\033[31m\n❌ Command not recognized. Please use a valid command.\033[0m\n\033[32m💡 Enter your command:\033[0m \n"
+			client.incoming <- "\033[31m❌ Command not recognized. Please use a valid command.\033[0m\n\n\033[32m💡 Enter your command:\033[0m \n"
 
 		} else {
 			msg := Message{from: client.name, room: client.room, content: input}
@@ -214,20 +214,42 @@ func joinRoom(client *Client, room string) {
 }
 
 func leaveRoom(client *Client) {
+	//CHECK, CLIENT DI DALAM ROOM ?
+	//"" --> tidak di dalam room
 	if client.room == "" {
 		return
 	}
+
+	//KUNCI AKSES DATA BERSAMA
 	lock.Lock()
-	members := rooms[client.room]
+
+	//NAMA ROOM
+	roomName := client.room
+
+	//AMBIL SLICE CLIENT DARI ROOM
+	members:= rooms[roomName]
+
+	//HAPUS CLIENT DI DAFTAR ROOM
 	for i, c := range members {
 		if c == client {
-			rooms[client.room] = append(members[:i], members[i+1:]...)
+			rooms[roomName] = append(members[:i], members[i+1:]...)
 			break
 		}
 	}
-	roomName := client.room
+
+	//CHECK APAKAH ROOM JADI KOSONG?
+	if len(rooms[roomName]) == 0 {
+		delete(rooms, roomName)
+		logger.Printf("Room '%s' is empty and has been deleted.", roomName)
+	}
+
+	//UPDATE ROOM CLIENT 
 	client.room = ""
+
+	//MEMBUKA LOCK
 	lock.Unlock()
+
+	//BROADCAST CLIENT SUDAH KELUAR DARI ROOM
 	broadcast <- Message{from: "\033[33mServer\033[0m", room: roomName, content: fmt.Sprintf("\033[33m>> %s has left the room\033[0m", client.name)}
 	logger.Printf("%s left room '%s'", client.name, roomName)
 }
@@ -242,10 +264,10 @@ func listRooms(client *Client) {
 	}
 
 	client.incoming <- "\033[33m\n+--------------------------------+\n"
-	client.incoming <- "| 📋 Active Room(s)                |\n"
+	client.incoming <- "| 📋 Active Room(s)              |\n"
 	client.incoming <- "+--------------------------------+\n"
 	for name, members := range rooms {
-		client.incoming <- fmt.Sprintf("| - %-15s %2d user(s) |\n", name, len(members))
+		client.incoming <- fmt.Sprintf("| - %-15s %2d user(s)   |\n", name, len(members))
 	}
 	client.incoming <- "+--------------------------------+\033[0m\n"
 	client.incoming <- "\033[32m💡 Enter your command:\033[0m \n"

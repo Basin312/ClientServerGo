@@ -172,11 +172,14 @@ func sendMessages(client *Client) {
 }
 
 func joinRoom(client *Client, room string) {
-	leaveRoom(client)
 	lock.Lock()
+	defer lock.Unlock()
+	if client.room != "" {
+		client.incoming <- "you have to /leave in order to join another room!\n"
+		return
+	}
 	rooms[room] = append(rooms[room], client)
 	client.room = room
-	lock.Unlock()
 	client.incoming <- fmt.Sprintf("You joined room '%s'\n", room)
 	broadcast <- Message{from: "Server", room: room, content: fmt.Sprintf(">> %s has joined the room\n", client.name)}
 	logger.Printf("%s joined room '%s'", client.name, room)

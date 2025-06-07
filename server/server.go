@@ -24,11 +24,21 @@ type Message struct {
 }
 
 var (
-	clients   = make(map[net.Conn]*Client) //list client yang ada di server
-	rooms     = make(map[string][]*Client) //list room dan client yang ada di room tersebut
-	broadcast = make(chan Message)
-	lock      = sync.Mutex{}
-	logger    *log.Logger
+	clients     = make(map[net.Conn]*Client) //list client yang ada di server
+	rooms       = make(map[string][]*Client) //list room dan client yang ada di room tersebut
+	broadcast   = make(chan Message)
+	lock        = sync.Mutex{}
+	logger      *log.Logger
+	helpMessage = "\033[33m" +
+		"\n+---------------------------------------------+\n" +
+		"|  🔧 Commands you can use:                   |\n" +
+		"|   • /join <room>   → Join or create room    |\n" +
+		"|   • /leave         → Leave current room     |\n" +
+		"|   • /rooms         → List active rooms      |\n" +
+		"|   • /exit          → Exit the program       |\n" +
+		"|   • /help          → List of all commands   |\n" +
+		"+---------------------------------------------+\033[0m\n" +
+		"\033[32m💡 Enter your command:\033[0m \n"
 )
 
 func main() {
@@ -112,17 +122,10 @@ func handleConnection(conn net.Conn) {
 
 	logger.Printf("%s connected from %s", client.name, conn.RemoteAddr())
 
-
-	lobbyMsg := fmt.Sprintf("\033[33m" +
-    "\n+---------------------------------------------+\n" +
-    "  👋 Welcome to the Lobby, %s!               \n" +
-    "|  🔧 Commands you can use:                   |\n" +
-    "|   • /join <room>   → Join or create room    |\n" +
-    "|   • /leave         → Leave current room     |\n" +
-    "|   • /rooms         → Exit the program       |\n" +
-    "|   • /exit          → List active rooms      |\n" +
-    "+---------------------------------------------+\033[0m\n" +
-	"\033[32m💡 Enter your command:\033[0m \n", client.name)
+	lobbyMsg := fmt.Sprintf("\033[33m"+
+		"\n+---------------------------------------------+\n"+
+		"  👋 Welcome to the Lobby, %s!               \n"+
+		helpMessage, client.name)
 
 	conn.Write([]byte(lobbyMsg))
 
@@ -152,31 +155,28 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 			joinRoom(client, room)
 		//command leave the room
 		case input == "/leave":
-			// check sudah join room sebelumnya atau tidak
 			if client.room == "" {
 				conn.Write([]byte("\033[33m\nYou have not taken any Room\033[0m\n"))
-				conn.Write([]byte("\033[32m💡 Enter your command:\033[0m \n"))
+				conn.Write([]byte(helpMessage))
 			} else {
 				leaveRoom(client)
 				conn.Write([]byte("\033[33m\n+--------------------------------------------+\n"))
 				conn.Write([]byte("| 🔔 You have left the room.                 |\n"))
 				conn.Write([]byte("+--------------------------------------------+\n"))
 				conn.Write([]byte(" 🏠 Welcome to Lobby, " + client.name + "!\n"))
-				conn.Write([]byte("| 🔧 Commands you can use:                   |\n"))
-				conn.Write([]byte("|  • /join <room>   → Join or create room    |\n"))
-				conn.Write([]byte("|  • /leave         → Leave current room     |\n"))
-				conn.Write([]byte("|  • /exit          → Exit the program       |\n"))
-				conn.Write([]byte("|  • /rooms         → List active rooms      |\n"))
-				conn.Write([]byte("+--------------------------------------------+\033[0m\n"))
-				conn.Write([]byte("\033[32m💡 Enter your command:\033[0m \n"))
-
+				conn.Write([]byte(helpMessage))
 			}
+
 		// command list room
 		case input == "/rooms":
 			listRooms(client)
 		// command keluar dari room
 		case input == "/exit":
 			client.conn.Close()
+		//case helps
+		case input == "/help":
+			client.incoming <- helpMessage
+
 		//command diluar yang sudah ada
 		default:
 			client.incoming <- "\033[31m❌ Unknown command.\033[0m\n\n\033[32m💡 Enter your command:\033[0m \n"
@@ -206,9 +206,9 @@ func joinRoom(client *Client, room string) {
 	rooms[room] = append(rooms[room], client)
 	client.room = room
 	lock.Unlock()
-	client.incoming <- fmt.Sprintf("\033[34m\n+-------------------------------+\n" +
-									"  🔗  Joined room: %-14s \n" +
-									"+-------------------------------+\033[0m\n\n", room)
+	client.incoming <- fmt.Sprintf("\033[34m\n+-------------------------------+\n"+
+		"  🔗  Joined room: %-14s \n"+
+		"+-------------------------------+\033[0m\n\n", room)
 	broadcast <- Message{from: "\033[33mServer\033[0m", room: room, content: fmt.Sprintf("\033[33m>> %s has joined the room\033[0m", client.name)}
 	logger.Printf("%s joined room '%s'", client.name, room)
 }
@@ -227,7 +227,7 @@ func leaveRoom(client *Client) {
 	roomName := client.room
 
 	//AMBIL SLICE CLIENT DARI ROOM
-	members:= rooms[roomName]
+	members := rooms[roomName]
 
 	//HAPUS CLIENT DI DAFTAR ROOM
 	for i, c := range members {
@@ -243,7 +243,7 @@ func leaveRoom(client *Client) {
 		logger.Printf("Room '%s' is empty and has been deleted.", roomName)
 	}
 
-	//UPDATE ROOM CLIENT 
+	//UPDATE ROOM CLIENT
 	client.room = ""
 
 	//MEMBUKA LOCK

@@ -259,7 +259,6 @@ func listRooms(client *Client) {
 	defer lock.Unlock()
 	if len(rooms) == 0 {
 		client.incoming <- "\033[33m\nNo active rooms.\033[0m\n"
-		client.incoming <- "\033[32m💡 Enter your command:\033[0m \n"
 		return
 	}
 
@@ -270,7 +269,6 @@ func listRooms(client *Client) {
 		client.incoming <- fmt.Sprintf("| - %-15s %2d user(s)   |\n", name, len(members))
 	}
 	client.incoming <- "+--------------------------------+\033[0m\n"
-	client.incoming <- "\033[32m💡 Enter your command:\033[0m \n"
 }
 
 func broadcaster() {

@@ -24,9 +24,9 @@ type Message struct {
 }
 
 var (
-	clients     = make(map[net.Conn]*Client) //list client yang ada di server
-	rooms       = make(map[string][]*Client) //list room dan client yang ada di room tersebut
-	broadcast   = make(chan Message)
+	clients     = make(map[net.Conn]*Client) // List client yang ada di server
+	rooms       = make(map[string][]*Client) // List room dan client yang ada di room tersebut
+	broadcast   = make(chan Message)         // Channel untuk pesan broadcast
 	lock        = sync.Mutex{}
 	logger      *log.Logger
 	helpMessage = "\033[33m" +
@@ -42,7 +42,7 @@ var (
 )
 
 func main() {
-	// bikin log untuk semua yang terjadi dalam server
+	// Membuat log untuk semua yang terjadi dalam server
 	logF, err := os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("Failed to open log file:", err)
@@ -51,7 +51,7 @@ func main() {
 	defer logF.Close()
 	logger = log.New(logF, "", log.LstdFlags)
 
-	// bikin koneksi
+	// Membuat koneksi
 	ln, err := net.Listen("tcp", ":9090")
 	if err != nil {
 		fmt.Println("Failed to listen:", err)
@@ -62,6 +62,7 @@ func main() {
 
 	fmt.Println("Server started on :9090")
 
+	// Goroutine untuk menyalurkan pesan ke anggota room
 	go broadcaster()
 
 	for {
@@ -75,12 +76,13 @@ func main() {
 	}
 }
 
+// Menangani koneksi satu client
 func handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 
 	var name string
 
-	// phase memasukan nama
+	// Phase memasukan nama yang unik
 	for {
 		conn.Write([]byte("\033[33m+-------------------------------------+\n"))
 		conn.Write([]byte("|    🌐  Welcome to Terminal Chat!    |\n"))
@@ -88,16 +90,16 @@ func handleConnection(conn net.Conn) {
 		conn.Write([]byte("+-------------------------------------+\033[0m\n\n"))
 		conn.Write([]byte("\033[32m👤 Please enter your name:\033[0m \n")) // prompt tanpa \n agar input di baris yang sama
 
-		//menerima input nama
+		// Menerima input nama dan mengecek nama sudah unik
 		name, _ = reader.ReadString('\n')
 		name = strings.TrimSpace(name)
 
-		// untuk menyimpan namanya valid(belum ada di server) atau tidak
+		// Menyimpan nama sudah valid(belum ada di server) atau tidak
 		var valid string
 
-		// check di di variable client
+		// Check di variable client
 		for _, client := range clients {
-			// kalau ada berarti tidak valid
+			// Jika ada berarti tidak valid
 			if client.name == name {
 				valid = "taken"
 				conn.Write([]byte("taken\n"))
@@ -105,16 +107,17 @@ func handleConnection(conn net.Conn) {
 			}
 		}
 
-		// jika valid maka keluar dari phase nama
+		// Jika valid maka keluar dari phase nama
 		if valid != "taken" {
 			conn.Write([]byte("ok\n"))
 			break
 		}
 
-		// message ke client kalau nama sudah ada punya
+		// Pesan ke client kalau nama sudah ada yang punya
 		conn.Write([]byte("\033[31m⚠️  Warning: username has been taken\033[0m\n"))
 	}
 
+	// Menyimpan client baru
 	lock.Lock()
 	client := &Client{name: name, conn: conn, incoming: make(chan string)}
 	clients[conn] = client
@@ -122,6 +125,7 @@ func handleConnection(conn net.Conn) {
 
 	logger.Printf("%s connected from %s", client.name, conn.RemoteAddr())
 
+	// Kirim pesan sambutan lobby
 	lobbyMsg := fmt.Sprintf("\033[33m"+
 		"\n+---------------------------------------------+\n"+
 		"  👋 Welcome to the Lobby, %s!               \n"+
@@ -129,14 +133,17 @@ func handleConnection(conn net.Conn) {
 
 	conn.Write([]byte(lobbyMsg))
 
+	// Goroutine untuk mengirim pesan ke client
 	go sendMessages(client)
 
+	// Membaca input berulang
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		input := scanner.Text()
 		handleCommand(client, input, conn)
 	}
 
+	// Membersihkan saat disconect
 	lock.Lock()
 	delete(clients, conn)
 	lock.Unlock()
@@ -145,15 +152,16 @@ func handleConnection(conn net.Conn) {
 	logger.Printf("%s disconnected", client.name)
 }
 
+// Memproses perintah atau pesan umum
 func handleCommand(client *Client, input string, conn net.Conn) {
 	if strings.HasPrefix(input, "/") {
 
 		switch {
-		// command join
+		// Command join
 		case strings.HasPrefix(input, "/join "):
 			room := strings.TrimSpace(strings.TrimPrefix(input, "/join "))
 			joinRoom(client, room)
-		//command leave the room
+		// Command leave the room
 		case input == "/leave":
 			if client.room == "" {
 				conn.Write([]byte("\033[33m\nYou have not taken any Room\033[0m\n"))
@@ -167,17 +175,17 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 				conn.Write([]byte(helpMessage))
 			}
 
-		// command list room
+		// Command list room
 		case input == "/rooms":
 			listRooms(client)
-		// command keluar dari room
+		// Command keluar dari room
 		case input == "/exit":
 			client.conn.Close()
-		//case helps
+		// Case helps
 		case input == "/help":
 			client.incoming <- helpMessage
 
-		//command diluar yang sudah ada
+		// Command diluar yang sudah ada
 		default:
 			client.incoming <- "\033[31m❌ Unknown command.\033[0m\n\n\033[32m💡 Enter your command:\033[0m \n"
 		}
@@ -194,12 +202,14 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 	}
 }
 
+// Mengirim semua pesan yang masuk ke channel incoming client
 func sendMessages(client *Client) {
 	for msg := range client.incoming {
 		client.conn.Write([]byte(msg))
 	}
 }
 
+// Bergabung atau membuat room baru
 func joinRoom(client *Client, room string) {
 	leaveRoom(client)
 	lock.Lock()
@@ -214,22 +224,22 @@ func joinRoom(client *Client, room string) {
 }
 
 func leaveRoom(client *Client) {
-	//CHECK, CLIENT DI DALAM ROOM ?
+	// Memeriksa, apakah client dalam room ?
 	//"" --> tidak di dalam room
 	if client.room == "" {
 		return
 	}
 
-	//KUNCI AKSES DATA BERSAMA
+	// Kunci akses data bersama
 	lock.Lock()
 
-	//NAMA ROOM
+	// Nama room
 	roomName := client.room
 
-	//AMBIL SLICE CLIENT DARI ROOM
+	// Mengambil slice client dari room
 	members := rooms[roomName]
 
-	//HAPUS CLIENT DI DAFTAR ROOM
+	// Menghapus client dari room
 	for i, c := range members {
 		if c == client {
 			rooms[roomName] = append(members[:i], members[i+1:]...)
@@ -237,23 +247,24 @@ func leaveRoom(client *Client) {
 		}
 	}
 
-	//CHECK APAKAH ROOM JADI KOSONG?
+	// Memeriksa, apakah room jadi kosong?
 	if len(rooms[roomName]) == 0 {
 		delete(rooms, roomName)
 		logger.Printf("Room '%s' is empty and has been deleted.", roomName)
 	}
 
-	//UPDATE ROOM CLIENT
+	// Update room client
 	client.room = ""
 
-	//MEMBUKA LOCK
+	// Membuka lock
 	lock.Unlock()
 
-	//BROADCAST CLIENT SUDAH KELUAR DARI ROOM
+	// Broadcast cliet sudah keluar dari room
 	broadcast <- Message{from: "\033[33mServer\033[0m", room: roomName, content: fmt.Sprintf("\033[33m>> %s has left the room\033[0m", client.name)}
 	logger.Printf("%s left room '%s'", client.name, roomName)
 }
 
+// Menampilkan daftar room aktif
 func listRooms(client *Client) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -271,6 +282,7 @@ func listRooms(client *Client) {
 	client.incoming <- "+--------------------------------+\033[0m\n"
 }
 
+// Broadcast pesan ke setiap anggota room
 func broadcaster() {
 	for msg := range broadcast {
 		lock.Lock()

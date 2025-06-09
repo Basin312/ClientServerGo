@@ -29,7 +29,7 @@ var (
 	broadcast   = make(chan Message)         // Channel untuk pesan broadcast
 	lock        = sync.Mutex{}
 	logger      *log.Logger
-	helpMessage = "\033[33m" +
+	lobby = "\033[33m" +
 		"\n+---------------------------------------------+\n" +
 		"|  🔧 Commands you can use:                   |\n" +
 		"|   • /join <room>   → Join or create room    |\n" +
@@ -39,6 +39,15 @@ var (
 		"|   • /help          → List of all commands   |\n" +
 		"+---------------------------------------------+\033[0m\n" +
 		"\033[32m💡 Enter your command:\033[0m \n"
+	helpMessage = "\033[33m" +
+		"\n+---------------------------------------------+\n" +
+		"|  🔧 Commands you can use:                   |\n" +
+		"|   • /join <room>   → Join or create room    |\n" +
+		"|   • /leave         → Leave current room     |\n" +
+		"|   • /rooms         → List active rooms      |\n" +
+		"|   • /exit          → Exit the program       |\n" +
+		"|   • /help          → List of all commands   |\n" +
+		"+---------------------------------------------+\033[0m\n" 
 )
 
 func main() {
@@ -129,7 +138,7 @@ func handleConnection(conn net.Conn) {
 	lobbyMsg := fmt.Sprintf("\033[33m"+
 		"\n+---------------------------------------------+\n"+
 		"  👋 Welcome to the Lobby, %s!               \n"+
-		helpMessage, client.name)
+		lobby, client.name)
 
 	conn.Write([]byte(lobbyMsg))
 
@@ -165,14 +174,14 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 		case input == "/leave":
 			if client.room == "" {
 				conn.Write([]byte("\033[33m\nYou have not taken any Room\033[0m\n"))
-				conn.Write([]byte(helpMessage))
+				conn.Write([]byte(lobby))
 			} else {
 				leaveRoom(client)
 				conn.Write([]byte("\033[33m\n+--------------------------------------------+\n"))
 				conn.Write([]byte("| 🔔 You have left the room.                 |\n"))
 				conn.Write([]byte("+--------------------------------------------+\n"))
 				conn.Write([]byte(" 🏠 Welcome to Lobby, " + client.name + "!\n"))
-				conn.Write([]byte(helpMessage))
+				conn.Write([]byte(lobby))
 			}
 
 		// Command list room

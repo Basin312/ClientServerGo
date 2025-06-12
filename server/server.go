@@ -65,12 +65,12 @@ func main() {
 	logger = log.New(logFile, "", log.LstdFlags)
 
 	//Membuat koneksi di port TCP 9090
-	listener, err := net.Listen("tcp", ":9090")
+	net, err := net.Listen("tcp", ":9090")
 	if err != nil { //Error jika port 9090 sudah digunakan oleh aplikasi lain 
 		fmt.Println("\033[31m\n❌ Failed to listen:\033[0m", err)
 		return
 	}
-	defer listener.Close()
+	defer net.Close()
 	fmt.Println("Server started on :9090")
 
 	//Goroutine untuk menyalurkan pesan ke client (concurrency)
@@ -79,7 +79,7 @@ func main() {
 	//Loop terus selama server aktif
 	//Menerima jika ada client baru
 	for {
-		conn, err := listener.Accept()
+		conn, err := net.Accept()
 		if err != nil {
 			fmt.Println("\033[31m\n❌ Failed to accept connection:\033[0m", err)
 			continue

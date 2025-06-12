@@ -1,3 +1,5 @@
+//Client
+
 package main
 
 import (
@@ -9,6 +11,7 @@ import (
 )
 
 func main() {
+	//Membuat koneksi ke server
 	conn, err := net.Dial("tcp", ":9090")
 
 	if err != nil {
@@ -17,12 +20,12 @@ func main() {
 	}
 	defer conn.Close()
 
-	reader := bufio.NewReader(conn)    // Membaca data dari server
-	stdin := bufio.NewReader(os.Stdin) // Membaca input pengguna
+	reader := bufio.NewReader(conn)    //Membaca data dari server
+	stdin := bufio.NewReader(os.Stdin) //Membaca input client
 
-	// Mengirim username sampai server mengonfirmasi
+	//Loop hingga username client diterima (unik)
 	for {
-		// Membaca initial prompt dari server
+		//Loop 6x, sambutan welcome ada 6 baris
 		for i := 0; i < 6; i++ {
 			line, err := reader.ReadString('\n')
 			if err != nil {
@@ -32,11 +35,11 @@ func main() {
 			fmt.Print(line)
 		}
 
-		// Membaca nama pengguna dari terminal dan mengirim ke server
+		//Input nama client dan kirim ke server
 		username, _ := stdin.ReadString('\n')
 		conn.Write([]byte(username))
 
-		// Mengharapkan respons "ok" atau "taken"
+		//Respon validasi dari server
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println("Failed to read username response")
@@ -47,18 +50,20 @@ func main() {
 		if response == "ok" {
 			break
 		}
-		if response == "taken" {
+
+		if response == "taken" { //Nama sudah digunakan
 			message, _ := reader.ReadString('\n')
 			fmt.Println(message)
 		}
 	}
 
-	// Menampilkan pesan sambutan dari server
+	//Sambutan dari server
 	welcome, _ := reader.ReadString('\n')
 	fmt.Print(welcome)
 
-	// Start goroutine untuk membaca pesan dari server
+	//Goroutine untuk membaca pesan dari server
 	go func() {
+		//Loop terus untuk mendengarkan dan menampilkan pesan dari server
 		for {
 			message, err := reader.ReadString('\n')
 			if err != nil {
@@ -66,11 +71,10 @@ func main() {
 				os.Exit(0)
 			}
 			fmt.Print(message)
-
 		}
 	}()
 
-	// Main input loop, membaca input pengguna dan mengirim ke server
+	//Loop terus, membaca input client dan kirim ke server
 	for {
 		text, _ := stdin.ReadString('\n')
 		text = strings.TrimSpace(text)

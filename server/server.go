@@ -25,8 +25,6 @@ type Message struct {
 	content string //Isi pesan
 }
 
-//oke
-
 // Mengelola state server
 var (
 	clients   = make(map[net.Conn]*Client) //Semua client aktif di server
@@ -67,12 +65,12 @@ func main() {
 	logger = log.New(logFile, "", log.LstdFlags)
 
 	//Membuat koneksi di port TCP 9090
-	net, err := net.Listen("tcp", ":9090")
+	listener, err := net.Listen("tcp", ":9090")
 	if err != nil { //Error jika port 9090 sudah digunakan oleh aplikasi lain
 		fmt.Println("\033[31m\n❌ Failed to listen:\033[0m", err)
 		return
 	}
-	defer net.Close()
+	defer listener.Close()
 	fmt.Println("Server started on :9090")
 
 	//Goroutine untuk menyalurkan pesan ke client (concurrency)
@@ -81,7 +79,7 @@ func main() {
 	//Loop terus selama server aktif
 	//Menerima jika ada client baru
 	for {
-		conn, err := net.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Println("\033[31m\n❌ Failed to accept connection:\033[0m", err)
 			continue
@@ -109,7 +107,7 @@ func handleConnection(conn net.Conn) {
 		name, _ = reader.ReadString('\n')
 		name = strings.TrimSpace(name)
 
-		//Validasi nama sudah unik/belom
+		//Validasi nama sudah unik/belum
 		var valid string
 		for _, client := range clients {
 			if client.name == name { //Jika nama udah terpakai
@@ -138,6 +136,15 @@ func handleConnection(conn net.Conn) {
 
 	logger.Printf("%s connected from %s", client.name, conn.RemoteAddr())
 
+	// NOTIF LOBBY: loop cek semua client yang room=="" (lobby) kecuali diri sendiri
+	lock.Lock()
+	for _, c := range clients {
+		if c.room == "" && c != client {
+			c.incoming <- fmt.Sprintf("\033[33m>> %s has connected to the server.\033[0m\n", client.name)
+		}
+	}
+	lock.Unlock()
+
 	//Kata sambutan
 	lobbyMsg := fmt.Sprintf("\033[33m"+
 		"\n+---------------------------------------------+\n"+
@@ -161,7 +168,17 @@ func handleConnection(conn net.Conn) {
 	delete(clients, conn) //Hapus client
 	lock.Unlock()
 	leaveRoom(client) //Otomatis keluar dari room
-	conn.Close()      //Koneksi ke server putus
+
+	// NOTIF LOBBY: loop cek semua client yang room=="" (lobby) kecuali diri sendiri
+	lock.Lock()
+	for _, c := range clients {
+		if c.room == "" && c != client {
+			c.incoming <- fmt.Sprintf("\033[33m>> %s has disconnected from the server.\033[0m\n", client.name)
+		}
+	}
+	lock.Unlock()
+
+	conn.Close() //Koneksi ke server putus
 	logger.Printf("%s disconnected", client.name)
 }
 
@@ -268,7 +285,7 @@ func leaveRoom(client *Client) {
 	client.room = ""
 	lock.Unlock()
 
-	//Broadcast cliet sudah keluar dari room
+	//Broadcast client sudah keluar dari room
 	broadcast <- Message{from: "\033[33mServer\033[0m", room: roomName, content: fmt.Sprintf("\033[33m>> %s has left the room\033[0m", client.name)}
 	logger.Printf("%s left room '%s'", client.name, roomName)
 }

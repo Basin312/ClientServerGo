@@ -13,26 +13,26 @@ import (
 )
 
 type Client struct {
-	name     string 		//Nama wajib unik
-	conn     net.Conn		//Koneksi jaringan dari server ke client
-	incoming chan string	//Channel untuk mengantar pesan ke client
-	room     string			//Room client berada
+	name     string      //Nama wajib unik
+	conn     net.Conn    //Koneksi jaringan dari server ke client
+	incoming chan string //Channel untuk mengantar pesan ke client
+	room     string      //Room client berada
 }
 
 type Message struct {
-	from    string			//Pengirim 
-	room    string			//Tujuan room
-	content string			//Isi pesan
+	from    string //Pengirim
+	room    string //Tujuan room
+	content string //Isi pesan
 }
 
-//Mengelola state server
+// Mengelola state server
 var (
-	clients     = make(map[net.Conn]*Client)	//Semua client aktif di server
-	rooms       = make(map[string][]*Client) 	//Semua nama room dan client di room tersebut
-	broadcast   = make(chan Message)         	//Channel  pesan broadcast
-	lock        = sync.Mutex{}					//Mutex untuk melindungi akses data bersama
+	clients   = make(map[net.Conn]*Client) //Semua client aktif di server
+	rooms     = make(map[string][]*Client) //Semua nama room dan client di room tersebut
+	broadcast = make(chan Message)         //Channel  pesan broadcast
+	lock      = sync.Mutex{}               //Mutex untuk melindungi akses data bersama
 
-	logger      *log.Logger		//Catat aktifitas 
+	logger *log.Logger //Catat aktifitas
 
 	//Command yang dapat digunakan client, diawali dengan "/"
 	lobby = "\033[33m" +
@@ -55,7 +55,7 @@ var (
 		"|   • /leave         → Leave current room     |\n" +
 		"|   • /exit          → Exit the program       |\n" +
 		"|   • /help          → List of all commands   |\n" +
-		"+---------------------------------------------+\033[0m\n" 
+		"+---------------------------------------------+\033[0m\n"
 )
 
 func main() {
@@ -65,12 +65,12 @@ func main() {
 	logger = log.New(logFile, "", log.LstdFlags)
 
 	//Membuat koneksi di port TCP 9090
-	net, err := net.Listen("tcp", ":9090")
-	if err != nil { //Error jika port 9090 sudah digunakan oleh aplikasi lain 
+	listener, err := net.Listen("tcp", ":9090")
+	if err != nil { //Error jika port 9090 sudah digunakan oleh aplikasi lain
 		fmt.Println("\033[31m\n❌ Failed to listen:\033[0m", err)
 		return
 	}
-	defer net.Close()
+	defer listener.Close()
 	fmt.Println("Server started on :9090")
 
 	//Goroutine untuk menyalurkan pesan ke client (concurrency)
@@ -79,7 +79,7 @@ func main() {
 	//Loop terus selama server aktif
 	//Menerima jika ada client baru
 	for {
-		conn, err := net.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Println("\033[31m\n❌ Failed to accept connection:\033[0m", err)
 			continue
@@ -88,7 +88,7 @@ func main() {
 	}
 }
 
-//Menangani koneksi satu client
+// Menangani koneksi satu client
 func handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 
@@ -107,7 +107,7 @@ func handleConnection(conn net.Conn) {
 		name, _ = reader.ReadString('\n')
 		name = strings.TrimSpace(name)
 
-		//Validasi nama sudah unik/belom
+		//Validasi nama sudah unik/belum
 		var valid string
 		for _, client := range clients {
 			if client.name == name { //Jika nama udah terpakai
@@ -136,6 +136,15 @@ func handleConnection(conn net.Conn) {
 
 	logger.Printf("%s connected from %s", client.name, conn.RemoteAddr())
 
+	// NOTIF LOBBY: loop cek semua client yang room=="" (lobby) kecuali diri sendiri
+	lock.Lock()
+	for _, c := range clients {
+		if c.room == "" && c != client {
+			c.incoming <- fmt.Sprintf("\033[33m>> %s has connected to the server.\033[0m\n", client.name)
+		}
+	}
+	lock.Unlock()
+
 	//Kata sambutan
 	lobbyMsg := fmt.Sprintf("\033[33m"+
 		"\n+---------------------------------------------+\n"+
@@ -156,25 +165,35 @@ func handleConnection(conn net.Conn) {
 
 	//CLIENT DISCONNECT
 	lock.Lock()
-	delete(clients, conn) 	//Hapus client
+	delete(clients, conn) //Hapus client
 	lock.Unlock()
-	leaveRoom(client)		//Otomatis keluar dari room
-	conn.Close()			//Koneksi ke server putus
+	leaveRoom(client) //Otomatis keluar dari room
+
+	// NOTIF LOBBY: loop cek semua client yang room=="" (lobby) kecuali diri sendiri
+	lock.Lock()
+	for _, c := range clients {
+		if c.room == "" && c != client {
+			c.incoming <- fmt.Sprintf("\033[33m>> %s has disconnected from the server.\033[0m\n", client.name)
+		}
+	}
+	lock.Unlock()
+
+	conn.Close() //Koneksi ke server putus
 	logger.Printf("%s disconnected", client.name)
 }
 
-//Mengirim semua pesan masuk ke channel incoming client
+// Mengirim semua pesan masuk ke channel incoming client
 func sendMessages(client *Client) {
 	for msg := range client.incoming {
 		client.conn.Write([]byte(msg))
 	}
 }
 
-//Memproses input client
-//Command: diawali "/"
-//Pesan biasa
+// Memproses input client
+// Command: diawali "/"
+// Pesan biasa
 func handleCommand(client *Client, input string, conn net.Conn) {
-	if strings.HasPrefix(input, "/") {  //Input command
+	if strings.HasPrefix(input, "/") { //Input command
 		switch {
 		case strings.HasPrefix(input, "/join "): //Command join
 			room := strings.TrimSpace(strings.TrimPrefix(input, "/join "))
@@ -195,7 +214,7 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 			}
 		case input == "/exit": //Command leave server
 			client.conn.Close()
-		case input == "/help": //Command help 
+		case input == "/help": //Command help
 			client.incoming <- helpMessage
 		default: //Command yang tidak ada di pilihan
 			client.incoming <- "\033[31m❌ Unknown command.\033[0m\n\n\033[32m💡 Enter your command:\033[0m \n"
@@ -211,8 +230,8 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 	}
 }
 
-//Broadcast pesan ke setiap anggota di room
-//Kirim pesan ke incoming client
+// Broadcast pesan ke setiap anggota di room
+// Kirim pesan ke incoming client
 func broadcaster() {
 	for msg := range broadcast {
 		lock.Lock()
@@ -226,7 +245,7 @@ func broadcaster() {
 	}
 }
 
-//Bergabung / membuat room baru
+// Bergabung / membuat room baru
 func joinRoom(client *Client, room string) {
 	leaveRoom(client) //Jika sebelumnya client dari room lain, otomatis keluar
 	lock.Lock()
@@ -266,7 +285,7 @@ func leaveRoom(client *Client) {
 	client.room = ""
 	lock.Unlock()
 
-	//Broadcast cliet sudah keluar dari room
+	//Broadcast client sudah keluar dari room
 	broadcast <- Message{from: "\033[33mServer\033[0m", room: roomName, content: fmt.Sprintf("\033[33m>> %s has left the room\033[0m", client.name)}
 	logger.Printf("%s left room '%s'", client.name, roomName)
 }

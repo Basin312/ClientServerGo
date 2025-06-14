@@ -26,7 +26,7 @@ func main() {
 	//Loop hingga username client diterima (unik)
 	for {
 		//Loop 6x, sambutan welcome ada 6 baris
-		for i := 0; i < 6; i++ {
+		for range 6 {
 			line, err := reader.ReadString('\n')
 			if err != nil {
 				fmt.Println("Gagal membaca pesan selamat datang")

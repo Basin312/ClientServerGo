@@ -65,12 +65,12 @@ func main() {
 	logger = log.New(logFile, "", log.LstdFlags)
 
 	//Membuat koneksi di port TCP 9090
-	listener, err := net.Listen("tcp", ":9090")
+	net, err := net.Listen("tcp", ":9090")
 	if err != nil { //Error jika port 9090 sudah digunakan oleh aplikasi lain
 		fmt.Println("\033[31m\n❌ Failed to listen:\033[0m", err)
 		return
 	}
-	defer listener.Close()
+	defer net.Close()
 	fmt.Println("Server started on :9090")
 
 	//Goroutine untuk menyalurkan pesan ke client (concurrency)
@@ -79,7 +79,7 @@ func main() {
 	//Loop terus selama server aktif
 	//Menerima jika ada client baru
 	for {
-		conn, err := listener.Accept()
+		conn, err := net.Accept()
 		if err != nil {
 			fmt.Println("\033[31m\n❌ Failed to accept connection:\033[0m", err)
 			continue
@@ -97,11 +97,11 @@ func handleConnection(conn net.Conn) {
 	//Membuat nama client, harus unik
 	//Loop hingga mendapat nama yang unik
 	for {
-		conn.Write([]byte("\033[33m+-------------------------------------+\n"))
-		conn.Write([]byte("|    🌐  Welcome to Terminal Chat!    |\n"))
-		conn.Write([]byte("|  Where terminals come to life 💬    |\n"))
-		conn.Write([]byte("+-------------------------------------+\033[0m\n\n"))
-		conn.Write([]byte("\033[32m👤 Please enter your name:\033[0m \n")) // prompt tanpa \n agar input di baris yang sama
+		sendDirect(conn, "\033[33m+-------------------------------------+\n")
+		sendDirect(conn, "|    🌐  Welcome to Terminal Chat!    |\n")
+		sendDirect(conn, "|  Where terminals come to life 💬    |\n")
+		sendDirect(conn, "+-------------------------------------+\033[0m\n\n")
+		sendDirect(conn, "\033[32m👤 Please enter your name:\033[0m \n")
 
 		//Menerima input nama dan cek apakah unik
 		name, _ = reader.ReadString('\n')
@@ -109,22 +109,24 @@ func handleConnection(conn net.Conn) {
 
 		//Validasi nama sudah unik/belum
 		var valid string
+		lock.Lock()
 		for _, client := range clients {
 			if client.name == name { //Jika nama udah terpakai
 				valid = "name_taken"
-				conn.Write([]byte("taken\n"))
+				sendDirect(conn, "taken\n")
 				break
 			}
 		}
+		lock.Unlock()
 
 		//Jika valid, keluar dari loop
 		if valid != "name_taken" {
-			conn.Write([]byte("ok\n"))
+			sendDirect(conn, "ok\n")
 			break
 		}
 
 		//Jika tidak valid, pesan ke client nama sudah ada yang punya
-		conn.Write([]byte("\033[31m⚠️  Warning: username has been taken\033[0m\n"))
+		sendDirect(conn, "\033[31m⚠️  Warning: username has been taken\033[0m\n")
 	}
 
 	//----SIMPAN CLIENT & SAMBUTAN----
@@ -136,8 +138,10 @@ func handleConnection(conn net.Conn) {
 
 	logger.Printf("%s connected from %s", client.name, conn.RemoteAddr())
 
-	// NOTIF LOBBY: loop cek semua client yang room=="" (lobby) kecuali diri sendiri
 	lock.Lock()
+
+	//Kasi notif ke client yang tidak join room
+	//Notif kalau ada client baru yang join server
 	for _, c := range clients {
 		if c.room == "" && c != client {
 			c.incoming <- fmt.Sprintf("\033[33m>> %s has connected to the server.\033[0m\n", client.name)
@@ -199,23 +203,30 @@ func handleCommand(client *Client, input string, conn net.Conn) {
 			room := strings.TrimSpace(strings.TrimPrefix(input, "/join "))
 			joinRoom(client, room)
 		case input == "/rooms": //Command list room
+
 			listRooms(client)
+
 		case input == "/leave": //Command leave the room
 			if client.room == "" { //Client belum join room
-				conn.Write([]byte("\033[33m\nYou have not taken any Room\033[0m\n"))
-				conn.Write([]byte(lobby))
+				client.incoming <- "\033[33m\nYou have not taken any Room\033[0m\n"
+				client.incoming <- "\033[32m💡 Enter your command:\033[0m \n"
 			} else {
 				leaveRoom(client)
-				conn.Write([]byte("\033[33m\n+--------------------------------------------+\n"))
-				conn.Write([]byte("| 🔔 You have left the room.                 |\n"))
-				conn.Write([]byte("+--------------------------------------------+\n"))
-				conn.Write([]byte("            🏠 Welcome to Lobby, " + client.name + "!"))
-				conn.Write([]byte(lobby))
+				client.incoming <- "\033[33m\n+--------------------------------------------+\n"
+				client.incoming <- "| 🔔 You have left the room.                 |\n"
+				client.incoming <- "+--------------------------------------------+\n"
+				client.incoming <- fmt.Sprintf("            🏠 Welcome to Lobby, %s!", client.name)
+				client.incoming <- lobby
+
 			}
 		case input == "/exit": //Command leave server
 			client.conn.Close()
 		case input == "/help": //Command help
-			client.incoming <- helpMessage
+			if client.room == "" {
+				client.incoming <- lobby
+			} else {
+				client.incoming <- helpMessage
+			}
 		default: //Command yang tidak ada di pilihan
 			client.incoming <- "\033[31m❌ Unknown command.\033[0m\n\n\033[32m💡 Enter your command:\033[0m \n"
 		}
@@ -297,6 +308,9 @@ func listRooms(client *Client) {
 
 	if len(rooms) == 0 { //Tidak ada room aktif
 		client.incoming <- "\033[33m\nNo active rooms.\033[0m\n"
+		if client.room == "" {
+			client.incoming <- "\033[32m💡 Enter your command:\033[0m \n"
+		}
 		return
 	}
 
@@ -307,4 +321,13 @@ func listRooms(client *Client) {
 		client.incoming <- fmt.Sprintf("| - %-15s %2d user(s)   |\n", name, len(members))
 	}
 	client.incoming <- "+--------------------------------+\033[0m\n"
+
+	if client.room == "" {
+		client.incoming <- "\033[32m💡 Enter your command:\033[0m \n"
+	}
+}
+
+// Digunakan hanya sebelum client struct terbentuk
+func sendDirect(conn net.Conn, msg string) {
+	conn.Write([]byte(msg))
 }
